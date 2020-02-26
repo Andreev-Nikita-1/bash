@@ -2,8 +2,9 @@ import unittest
 import bash_builtins
 import sys
 import tempfile
+import shutil
 import os
-
+from pathlib import Path
 # command_to_function = {
 #     "cat": cat_function,
 #     "echo": echo_function,
@@ -33,7 +34,7 @@ class TestBuiltins(unittest.TestCase):
         read_pipe, write_pipe = os.pipe()
 
         thread = bash_builtins.simple_interprete_single_builtin_command(["cat", file.name],
-                                                                        stdin=sys.stdin.fileno(),
+                                                                        stdin=0,
                                                                         stdout=write_pipe)
         thread.wait()
         os.remove(filename)
@@ -44,7 +45,7 @@ class TestBuiltins(unittest.TestCase):
     def test_echo(self):
         read_pipe, write_pipe = os.pipe()
         thread = bash_builtins.simple_interprete_single_builtin_command(["echo", *self.TEST_ARGUMENTS],
-                                                                        stdin=sys.stdin.fileno(),
+                                                                        stdin=0,
                                                                         stdout=write_pipe)
         thread.wait()
         os.close(write_pipe)
@@ -59,7 +60,7 @@ class TestBuiltins(unittest.TestCase):
         read_pipe, write_pipe = os.pipe()
 
         thread = bash_builtins.simple_interprete_single_builtin_command(["wc", file.name],
-                                                                        stdin=sys.stdin.fileno(),
+                                                                        stdin=0,
                                                                         stdout=write_pipe)
         thread.wait()
         os.close(write_pipe)
@@ -86,7 +87,7 @@ class TestBuiltins(unittest.TestCase):
     def test_pwd(self):
         read_pipe, write_pipe = os.pipe()
         thread = bash_builtins.simple_interprete_single_builtin_command(["pwd"],
-                                                                        stdin=sys.stdin.fileno(),
+                                                                        stdin=0,
                                                                         stdout=write_pipe)
         thread.wait()
         os.close(write_pipe)
@@ -115,7 +116,7 @@ class TestBuiltins(unittest.TestCase):
         file.close()
         read_pipe, write_pipe = os.pipe()
         thread = bash_builtins.simple_interprete_single_builtin_command(["grep", "abc", filename],
-                                                                        stdin=sys.stdin.fileno(),
+                                                                        stdin=0,
                                                                         stdout=write_pipe)
         thread.wait()
         os.close(write_pipe)
@@ -185,6 +186,86 @@ class TestBuiltins(unittest.TestCase):
         with open(read_pipe, "r") as fin:
             self.assertListEqual(fin.readlines(),
                                  ['abc\n', 'abcd\n', 'dcba\n', 'aab\n', 'aabcd\n', 'aabc\n', 'abacbca\n', 'abc'])
+
+    def test_cd_empty(self):
+        read_pipe, write_pipe = os.pipe()
+        thread = bash_builtins.simple_interprete_single_builtin_command(["cd"],
+                                                                        stdin=0,
+                                                                        stdout=write_pipe)
+        thread.wait()
+        os.close(write_pipe)
+        self.assertEqual(os.getcwd(), str(Path.home()))
+
+    def test_cd_next(self):
+        dir0 = tempfile.TemporaryDirectory()
+        dir1 = tempfile.TemporaryDirectory(dir=dir0.name)
+        name = os.path.relpath(dir1.name, dir0.name)
+        curdir = os.getcwd()
+        os.chdir(dir0.name)
+        read_pipe, write_pipe = os.pipe()
+        thread = bash_builtins.simple_interprete_single_builtin_command(["cd", name],
+                                                                        stdin=0,
+                                                                        stdout=write_pipe)
+        thread.wait()
+        os.close(write_pipe)
+        self.assertEqual(os.getcwd(), dir1.name)
+        os.chdir(curdir)
+        dir0.cleanup()
+
+    def test_cd_pred(self):
+        dir0 = tempfile.TemporaryDirectory()
+        dir1 = tempfile.TemporaryDirectory(dir=dir0.name)
+        curdir = os.getcwd()
+        os.chdir(dir1.name)
+        read_pipe, write_pipe = os.pipe()
+        thread = bash_builtins.simple_interprete_single_builtin_command(["cd", ".."],
+                                                                        stdin=0,
+                                                                        stdout=write_pipe)
+        thread.wait()
+        os.close(write_pipe)
+        self.assertEqual(os.getcwd(), dir0.name)
+        os.chdir(curdir)
+        dir0.cleanup()
+
+    def test_ls_empty(self):
+        dir0 = tempfile.TemporaryDirectory()
+        dir1 = tempfile.TemporaryDirectory(dir=dir0.name)
+        file1 = tempfile.NamedTemporaryFile(dir=dir0.name)
+        dir1_name = os.path.relpath(dir1.name, dir0.name)
+        file1_name = os.path.relpath(file1.name, dir0.name)
+        curdir = os.getcwd()
+        os.chdir(dir0.name)
+        read_pipe, write_pipe = os.pipe()
+        thread = bash_builtins.simple_interprete_single_builtin_command(["ls"],
+                                                                        stdin=0,
+                                                                        stdout=write_pipe)
+        thread.wait()
+        os.close(write_pipe)
+        with open(read_pipe, "r") as fin:
+            lines = fin.readlines()
+            answer = len(lines) == 2 and file1_name + '\n' in lines and dir1_name + "/\n" in lines
+            self.assertTrue(answer)
+        os.chdir(curdir)
+        dir0.cleanup()
+
+    def test_ls(self):
+        dir0 = tempfile.TemporaryDirectory()
+        dir1 = tempfile.TemporaryDirectory(dir=dir0.name)
+        file1 = tempfile.NamedTemporaryFile(dir=dir0.name)
+        dir0_path = os.path.relpath(dir0.name, os.getcwd())
+        dir1_name = os.path.relpath(dir1.name, dir0.name)
+        file1_name = os.path.relpath(file1.name, dir0.name)
+        read_pipe, write_pipe = os.pipe()
+        thread = bash_builtins.simple_interprete_single_builtin_command(["ls", dir0_path],
+                                                                        stdin=0,
+                                                                        stdout=write_pipe)
+        thread.wait()
+        os.close(write_pipe)
+        with open(read_pipe, "r") as fin:
+            lines = fin.readlines()
+            answer = len(lines) == 2 and file1_name + '\n' in lines and dir1_name + "/\n" in lines
+            self.assertTrue(answer)
+        dir0.cleanup()
 
 
 class TestTokenize(unittest.TestCase):

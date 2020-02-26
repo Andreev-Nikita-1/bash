@@ -40,7 +40,7 @@ def simple_interprete_single_command(command, stdin, stdout):
         return subprocess.Popen(command, bufsize=0, stdin=stdin, stdout=stdout, env=os.environ)
 
 
-def simple_interprete_commands(tokens, stdin=sys.stdin.fileno(), stdout=sys.stdout.fileno()):
+def simple_interprete_commands(tokens, stdin=0, stdout=sys.stdout.fileno()):
     """
     interprete tokens as bash command(maybe with pipes).
 

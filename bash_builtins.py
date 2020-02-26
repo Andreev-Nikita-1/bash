@@ -3,6 +3,7 @@ import os
 import argparse
 import threading
 import signal
+from pathlib import Path
 
 
 class BuiltinThreadWrapper:
@@ -152,13 +153,61 @@ def grep_function(args, stdin, stdout):
                 fout.write(line)
 
 
+def cd_function(args, stdin, stdout):
+    """
+    changes working direcroey
+    :param args: new directory
+    :param stdin: input file descriptor
+    :param stdout: output file descriptor
+    :return: nothing
+    """
+    if not args:
+        home = str(Path.home())
+        os.chdir(home)
+    else:
+        os.chdir(args[0])
+
+
+def ls_finction(args, stdin, stdout):
+    """
+    lists files in directory
+    :param args: directory
+    :param stdin: input file descriptor
+    :param stdout: output file descriptor
+    :return: files separated by \n
+    """
+    directory = os.getcwd()
+
+    def handle(name):
+        """
+        adds slash if directory name privided
+        adds quotes if name contains spaces
+        """
+        if os.path.isdir(os.path.join(directory, name)):
+            name = name + "/"
+        if name.find(" ") != -1:
+            if name.find("\'") != -1:
+                name = "\"" + name + "\""
+            else:
+                name = "\'" + name + "\'"
+        return name
+
+    fout = open(stdout, "w", closefd=False, encoding="utf8")  # we should not close stdout
+    if args:
+        directory = args[0]
+    files = os.listdir(directory)
+    fout.write("\n".join([handle(f) for f in files])+"\n")
+
+
 command_to_function = {
     "cat": cat_function,
     "echo": echo_function,
     "wc": wc_function,
     "pwd": pwd_function,
     "exit": exit_function,
-    "grep": grep_function
+    "grep": grep_function,
+    "cd": cd_function,
+    "ls": ls_finction
 }
 
 
